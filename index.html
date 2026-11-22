@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#176858">
+  <title>Gather - Seating planner</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./model.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="./"><span class="brand-mark">G</span><span>gather<small>VENUE &amp; SEATING PLANNER</small></span></a>
+    <div class="header-actions">
+      <span id="save-status" class="save-status">Saved in this browser</span>
+      <button id="import-button">Import plan</button>
+      <input id="import-file" type="file" accept=".json,application/json" hidden>
+      <button id="export-button">Export plan</button>
+      <button id="print-button" class="primary">Print plan</button>
+    </div>
+  </header>
+  <main>
+    <section class="venue-heading">
+      <div><p class="eyebrow">A PLACE FOR EVERYONE</p><h1 id="venue-title">Your venue</h1><p class="muted">Arrange the room. Bring people together.</p></div>
+      <button id="rename-venue">Rename venue</button>
+    </section>
+    <section class="stats" aria-label="Plan overview">
+      <div><strong id="room-count">0</strong><span>Rooms</span></div>
+      <div><strong id="table-count">0</strong><span>Tables</span></div>
+      <div><strong id="guest-count">0</strong><span>Guests</span></div>
+      <div><strong id="seated-count">0</strong><span>Seated</span></div>
+      <div><strong id="available-count">0</strong><span>Open seats</span></div>
+    </section>
+    <div id="workspace" class="workspace">
+      <aside class="panel guests-panel">
+        <div class="panel-heading"><div><p class="eyebrow">YOUR PEOPLE</p><h2>Guest list</h2></div><span id="guest-badge" class="badge">0</span></div>
+        <form id="guest-form">
+          <label for="guest-names">Add names, one per line</label>
+          <textarea id="guest-names" rows="3" placeholder="Alex Morgan&#10;Sam Taylor" maxlength="50000" required></textarea>
+          <button class="primary full" type="submit">+ Add guests</button>
+        </form>
+        <div class="guest-filters"><label class="sr-only" for="guest-search">Search guests</label><input id="guest-search" type="search" placeholder="Search guests..."><label class="check-label"><input id="unseated-only" type="checkbox"> Unseated only</label></div>
+        <p class="helper">Choose a table below each name, or drag a guest onto a table.</p>
+        <div id="guest-list" class="guest-list"></div>
+      </aside>
+      <section class="panel layout-panel" aria-label="Room layout">
+        <div class="room-toolbar"><div id="room-tabs" class="room-tabs" role="tablist" aria-label="Rooms"></div><button id="add-room">+ Add room</button></div>
+        <div class="layout-toolbar"><div><h2 id="room-title">Create your first room</h2><p id="room-dimensions" class="muted">Start with the space, then add your tables.</p></div><div class="toolbar-actions"><button id="fullscreen-button" aria-pressed="false">Full screen</button><button id="edit-room" disabled>Edit room</button><button id="add-table" class="primary" disabled>+ Add table</button></div></div>
+        <div class="canvas-scroll"><div id="room-canvas" class="room-canvas" role="region" aria-label="Room floor plan"><div class="canvas-empty"><span class="empty-icon">+</span><h3>Good gatherings start here</h3><p>Add a room to start planning your venue.</p><button id="empty-add-room" class="primary">Create a room</button></div></div></div>
+        <div class="canvas-footer"><span>Drag tables to move them. Select a table to edit it.</span><span>Dimensions in meters</span></div>
+        <section id="table-details" class="table-details" hidden></section>
+      </section>
+      <div id="notification" class="notification" role="status" aria-live="polite" hidden></div>
+    </div>
+  </main>
+  <footer class="app-footer">Your plan stays on this device. Export a copy to back it up or share it.</footer>
+  <dialog id="editor-dialog">
+    <form id="editor-form">
+      <div class="dialog-heading"><h2 id="dialog-title"></h2><button type="button" id="close-dialog" class="icon-button" aria-label="Close dialog">&times;</button></div>
+      <div id="dialog-fields"></div>
+      <p id="dialog-error" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" id="delete-item" class="danger" hidden>Delete</button><span class="spacer"></span><button type="button" id="cancel-dialog">Cancel</button><button class="primary" type="submit">Save</button></div>
+    </form>
+  </dialog>
+  <section id="print-plan" class="print-plan" aria-label="Printable seating plan"></section>
+</body>
+</html>

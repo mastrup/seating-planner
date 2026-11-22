@@ -1,0 +1,14 @@
+{
+  "name": "gather-seating-planner",
+  "private": true,
+  "version": "1.0.0",
+  "description": "A dependency-free static venue and seating planner",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test model.test.mjs",
+    "check": "node --check app.js && node --check model.js && node --check server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
