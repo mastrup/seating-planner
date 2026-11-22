@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import model from "./model.js";
+import model from "./public/model.js";
 
 const { createPlan, validatePlan, assignGuest, linkGuests, unlinkGuest, moveGuestToSeat, clampPosition, tableSize, removeRoom, removeTable } = model;
 

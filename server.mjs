@@ -2,11 +2,11 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 
 const assets = new Map([
-  ["/", ["index.html", "text/html"]],
-  ["/index.html", ["index.html", "text/html"]],
-  ["/styles.css", ["styles.css", "text/css"]],
-  ["/app.js", ["app.js", "text/javascript"]],
-  ["/model.js", ["model.js", "text/javascript"]],
+  ["/", ["public/index.html", "text/html"]],
+  ["/index.html", ["public/index.html", "text/html"]],
+  ["/styles.css", ["public/styles.css", "text/css"]],
+  ["/app.js", ["public/app.js", "text/javascript"]],
+  ["/model.js", ["public/model.js", "text/javascript"]],
 ]);
 const port = Number(process.env.PORT ?? 8080);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("PORT must be an integer between 1 and 65535.");

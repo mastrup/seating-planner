@@ -4,7 +4,7 @@ A browser-only venue planner with multiple rooms, draggable round and rectangula
 
 ## Run locally
 
-The simplest way to run the app is to open `index.html` directly in your browser; it uses plain scripts, so no server is needed. Optionally, with Node.js 18 or later, start the included local static server:
+The simplest way to run the app is to open `public/index.html` directly in your browser; it uses plain scripts, so no server is needed. Optionally, with Node.js 18 or later, start the included local static server:
 
 ```powershell
 npm start
@@ -14,14 +14,14 @@ Then open `http://localhost:8080`. The included server listens only on your own 
 
 ## Deploy to static hosting
 
-Upload these four files together to your static website:
+Upload the contents of the `public/` folder together to your static website:
 
 - `index.html`
 - `styles.css`
 - `app.js`
 - `model.js`
 
-There is no build step. Relative asset paths support hosting in a subdirectory. Azure Static Web Apps, GitHub Pages, and other static hosts can serve the app; choose no framework/build command and the directory containing `index.html` as the site output.
+There is no build step. Relative asset paths support hosting in a subdirectory. Azure Static Web Apps, GitHub Pages, and other static hosts can serve the app. For Azure Static Web Apps choose the **Custom** build preset with app location `/public`, and leave the API location and output location empty.
 
 ## Use
 
