@@ -656,6 +656,16 @@ $("delete-item").addEventListener("click", () => {
 });
 for (const id of ["close-dialog", "cancel-dialog"]) $(id).addEventListener("click", () => $("editor-dialog").close());
 $("rename-venue").addEventListener("click", () => openEditor("venue"));
+$("new-plan-button").addEventListener("click", () => {
+  if (!confirm("Start a new plan? Export your current plan first if you want to keep it.")) return;
+  activeRoomId = null;
+  selectedTableId = null;
+  $("guest-search").value = "";
+  $("unseated-only").checked = false;
+  $("guest-names").value = "";
+  commit(createPlan());
+  notify("New plan created.");
+});
 $("add-room").addEventListener("click", () => openEditor("room"));
 $("add-table").addEventListener("click", () => openEditor("table"));
 $("edit-room").addEventListener("click", () => openEditor("room", activeRoomId));

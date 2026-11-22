@@ -10,20 +10,25 @@
   <script src="./app.js" defer></script>
 </head>
 <body>
-  <header class="app-header">
-    <a class="brand" href="./"><span class="brand-mark">G</span><span>gather<small>VENUE &amp; SEATING PLANNER</small></span></a>
-    <div class="header-actions">
-      <span id="save-status" class="save-status">Saved in this browser</span>
-      <button id="import-button">Import plan</button>
-      <input id="import-file" type="file" accept=".json,application/json" hidden>
-      <button id="export-button">Export plan</button>
-      <button id="print-button" class="primary">Print plan</button>
-    </div>
-  </header>
   <main>
     <section class="venue-heading">
-      <div><p class="eyebrow">A PLACE FOR EVERYONE</p><h1 id="venue-title">Your venue</h1><p class="muted">Arrange the room. Bring people together.</p></div>
-      <button id="rename-venue">Rename venue</button>
+      <div>
+        <div class="venue-title-row">
+          <h1 id="venue-title">Your venue</h1>
+          <button id="rename-venue" class="icon-button rename-venue-button" type="button" aria-label="Rename venue" title="Rename venue">&#9998;</button>
+        </div>
+        <p class="muted">Arrange the room. Bring people together.</p>
+      </div>
+      <div class="venue-actions">
+        <button id="new-plan-button">New plan</button>
+        <span id="save-status" class="save-status">Saved in this browser</span>
+        <div class="header-actions">
+          <button id="import-button">Import plan</button>
+          <input id="import-file" type="file" accept=".json,application/json" hidden>
+          <button id="export-button">Export plan</button>
+          <button id="print-button" class="primary">Print plan</button>
+        </div>
+      </div>
     </section>
     <section class="stats" aria-label="Plan overview">
       <div><strong id="room-count">0</strong><span>Rooms</span></div>
