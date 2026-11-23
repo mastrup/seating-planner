@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import model from "./public/model.js";
 
-const { createPlan, validatePlan, assignGuest, linkGuests, unlinkGuest, moveGuestToSeat, clampPosition, tableSize, removeRoom, removeTable } = model;
+const { createPlan, validatePlan, assignGuest, linkGuests, unlinkGuest, renameGroup, moveGuestToGroup, moveGuestToSeat, clampPosition, tableSize, removeRoom, removeTable } = model;
 
 function fixture() {
   return {
@@ -35,6 +35,61 @@ test("a link left with one guest is dropped on validation", () => {
   assert.equal(validatePlan(plan).guests[0].linkId, undefined);
 });
 
+test("group names are validated, preserved in exports, and cleaned up with their groups", () => {
+  const plan = fixture();
+  plan.tables[0].capacity = 2;
+  linkGuests(plan, "guest1", "guest2");
+  const linkId = plan.guests[0].linkId;
+  renameGroup(plan, linkId, "  Family  ");
+  assert.equal(plan.groupNames[linkId], "Family");
+  assert.deepEqual(validatePlan(JSON.parse(JSON.stringify(plan))), plan);
+  assert.throws(() => renameGroup(plan, linkId, " "), /Group name/);
+  assert.throws(() => renameGroup(plan, linkId, "x".repeat(101)), /Group name/);
+  assert.throws(() => renameGroup(plan, "missing", "Friends"), /no longer exists/);
+  assert.throws(() => validatePlan({ ...plan, groupNames: { [linkId]: " " } }), /Group name/);
+  unlinkGuest(plan, "guest1");
+  assert.equal(plan.groupNames[linkId], undefined);
+  const legacyPlan = fixture();
+  delete legacyPlan.groupNames;
+  assert.deepEqual(validatePlan(legacyPlan).groupNames, {});
+});
+
+test("merging named groups keeps the first selected group's name", () => {
+  const plan = fixture();
+  plan.tables[0].capacity = 4;
+  plan.guests.push(
+    { id: "guest3", name: "Jo", tableId: null },
+    { id: "guest4", name: "Pat", tableId: null },
+  );
+  linkGuests(plan, "guest1", "guest2");
+  linkGuests(plan, "guest3", "guest4");
+  const firstId = plan.guests[0].linkId;
+  const secondId = plan.guests[2].linkId;
+  renameGroup(plan, firstId, "Family");
+  renameGroup(plan, secondId, "Friends");
+  linkGuests(plan, "guest1", "guest3");
+  assert.equal(plan.groupNames[firstId], "Family");
+  assert.equal(plan.groupNames[secondId], undefined);
+  assert.equal(new Set(plan.guests.map(guest => guest.linkId)).size, 1);
+});
+
+test("merging groups uses the first person's table and unlinking preserves seats", () => {
+  const plan = fixture();
+  plan.tables[0].capacity = 4;
+  plan.guests.push({ id: "guest3", name: "Alex", tableId: "table2" }, { id: "guest4", name: "Pat", tableId: "table2" });
+  linkGuests(plan, "guest1", "guest2");
+  linkGuests(plan, "guest3", "guest4");
+  linkGuests(plan, "guest2", "guest3");
+  const merged = validatePlan(JSON.parse(JSON.stringify(plan)));
+  assert.equal(new Set(merged.guests.map(guest => guest.linkId)).size, 1);
+  assert.deepEqual(merged.guests.map(guest => guest.tableId), Array(4).fill("table1"));
+  unlinkGuest(merged, "guest2");
+  const unlinked = validatePlan(merged);
+  assert.equal(unlinked.guests[1].linkId, undefined);
+  assert.equal(unlinked.guests[1].tableId, "table1");
+  assert.equal(unlinked.guests.filter(guest => guest.linkId).length, 3);
+});
+
 test("assignment enforces capacity without losing an existing assignment", () => {
   const plan = fixture();
   assignGuest(plan, "guest1", "table1");
@@ -46,6 +101,62 @@ test("assignment enforces capacity without losing an existing assignment", () =>
   assert.equal(plan.guests[0].tableId, null);
   assert.throws(() => assignGuest(plan, "missing", null), /no longer exists/);
   assert.throws(() => assignGuest(plan, "guest1", "missing"), /no longer exists/);
+});
+
+test("moving between groups transfers only one person and dissolves a leftover pair", () => {
+  const plan = fixture();
+  plan.tables[0].capacity = 2;
+  plan.tables[1].capacity = 3;
+  plan.guests[1].tableId = "table1";
+  plan.guests[0].linkId = plan.guests[1].linkId = "source";
+  plan.guests.push(
+    { id: "guest3", name: "Alex", tableId: "table2", linkId: "destination" },
+    { id: "guest4", name: "Pat", tableId: "table2", linkId: "destination" },
+  );
+  moveGuestToGroup(plan, "guest1", "guest3");
+  assert.deepEqual(plan.guests.map(guest => guest.tableId), ["table2", "table1", "table2", "table2"]);
+  assert.deepEqual(plan.guests.map(guest => guest.linkId), ["destination", undefined, "destination", "destination"]);
+  assert.deepEqual(validatePlan(JSON.parse(JSON.stringify(plan))), plan);
+});
+
+test("group transfer rejects full tables and invalid targets without any mutation", () => {
+  const plan = fixture();
+  plan.guests[0].linkId = plan.guests[1].linkId = "source";
+  plan.guests.push(
+    { id: "guest3", name: "Jo", tableId: "table2", linkId: "destination" },
+    { id: "guest4", name: "Pat", tableId: "table2", linkId: "destination" },
+  );
+  const before = structuredClone(plan);
+  assert.throws(() => moveGuestToGroup(plan, "guest1", "guest3"), /full/);
+  assert.deepEqual(plan, before);
+  assert.throws(() => moveGuestToGroup(plan, "guest1", "missing"), /no longer exists/);
+  assert.deepEqual(plan, before);
+  moveGuestToGroup(plan, "guest1", "guest2");
+  moveGuestToGroup(plan, "guest1", "guest1");
+  assert.deepEqual(plan, before);
+});
+
+test("moving to an unlinked person creates a group at the destination, even when unseated", () => {
+  const plan = fixture();
+  moveGuestToGroup(plan, "guest1", "guest2");
+  assert.deepEqual(plan.guests.map(guest => guest.tableId), [null, null]);
+  assert.equal(plan.guests[0].linkId, plan.guests[1].linkId);
+  const seated = fixture();
+  seated.tables[0].capacity = 2;
+  moveGuestToGroup(seated, "guest2", "guest1");
+  assert.deepEqual(seated.guests.map(guest => guest.tableId), ["table1", "table1"]);
+});
+
+test("creating a group does not reuse an ID still used by an old group", () => {
+  const plan = fixture();
+  plan.guests.push(
+    { id: "guest3", name: "Jo", tableId: null, linkId: "link-guest2" },
+    { id: "guest4", name: "Pat", tableId: null, linkId: "link-guest2" },
+  );
+  moveGuestToGroup(plan, "guest1", "guest2");
+  assert.notEqual(plan.guests[0].linkId, "link-guest2");
+  assert.equal(plan.guests[0].linkId, plan.guests[1].linkId);
+  assert.deepEqual(plan.guests.slice(2).map(guest => guest.linkId), ["link-guest2", "link-guest2"]);
 });
 
 test("drag bounds account for rotated rectangular tables", () => {

@@ -1,5 +1,8 @@
 (function () {
-const { STORAGE_KEY, LIMITS, createPlan, validatePlan, tableSize, clampPosition, occupancy, assignGuest, linkGuests, unlinkGuest, moveGuestToSeat, removeTable, removeRoom } = globalThis.GatherModel;
+const { STORAGE_KEY, LIMITS, createPlan, validatePlan, tableSize, clampPosition, occupancy, assignGuest, linkGuests, unlinkGuest, renameGroup, moveGuestToGroup, moveGuestToSeat, removeTable, removeRoom } = globalThis.GatherModel;
+
+const { t, errorMessage } = globalThis.GatherI18n;
+GatherI18n.setLocale(GatherI18n.initialLocale());
 
 const $ = id => document.getElementById(id);
 const element = (tag, className, text) => {
@@ -12,11 +15,13 @@ const uid = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
 };
-let plan = createPlan();
+let plan = createPlan(t("plan.defaultName"));
+let saveStatusKey = "status.saved";
 let activeRoomId = null;
 let selectedTableId = null;
 let editor = null;
 let notificationTimer;
+let groupDragGuestId = null;
 
 function notify(message, error = false) {
   clearTimeout(notificationTimer);
@@ -30,18 +35,23 @@ try {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored) plan = validatePlan(JSON.parse(stored));
 } catch (error) {
-  $("save-status").textContent = "Saved plan could not be loaded";
-  notify(`Could not load browser data: ${error.message} Export your work before leaving.`, true);
+  setSaveStatus("status.loadFailed");
+  notify(t("plan.loadFailed", { message: errorMessage(error) }), true);
 }
 activeRoomId = plan.rooms[0]?.id ?? null;
+
+function setSaveStatus(key) {
+  saveStatusKey = key;
+  $("save-status").textContent = t(key);
+}
 
 function save() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
-    $("save-status").textContent = "Saved in this browser";
+    setSaveStatus("status.saved");
   } catch (error) {
-    $("save-status").textContent = "Not saved - export a backup";
-    notify(`Browser save failed: ${error.message} Please export your plan to keep your changes.`, true);
+    setSaveStatus("status.notSaved");
+    notify(t("plan.saveFailed", { message: errorMessage(error) }), true);
   }
 }
 
@@ -59,7 +69,7 @@ function render() {
   if (!currentRoom()) activeRoomId = plan.rooms[0]?.id ?? null;
   if (!plan.tables.some(table => table.id === selectedTableId && table.roomId === activeRoomId)) selectedTableId = null;
   $("venue-title").textContent = plan.name;
-  document.title = `${plan.name} - Gather`;
+  document.title = plan.name;
   $("room-count").textContent = plan.rooms.length;
   $("table-count").textContent = plan.tables.length;
   $("guest-count").textContent = plan.guests.length;
@@ -70,6 +80,7 @@ function render() {
   renderRooms();
   renderGuests();
   renderDetails();
+  if (!$("groups-panel").hidden) renderGroups();
 }
 
 function renderRooms() {
@@ -85,28 +96,30 @@ function renderRooms() {
   const room = currentRoom();
   $("edit-room").disabled = !room;
   $("add-table").disabled = !room;
-  $("room-title").textContent = room?.name ?? "Create your first room";
+  $("room-title").textContent = room?.name ?? t("room.createFirst");
   const roomTableCount = plan.tables.filter(table => table.roomId === room?.id).length;
-  $("room-dimensions").textContent = room ? `${room.width} m wide x ${room.height} m long · ${roomTableCount} ${roomTableCount === 1 ? "table" : "tables"}` : "Start with the space, then add your tables.";
+  $("room-dimensions").textContent = room
+    ? t("room.dimensionsWithTables", { width: room.width, height: room.height, count: roomTableCount })
+    : t("room.startHint");
   const canvas = $("room-canvas");
   if (!room) {
     canvas.style.aspectRatio = "1.5";
     canvas.replaceChildren();
     const empty = element("div", "canvas-empty");
-    empty.append(element("span", "empty-icon", "+"), element("h3", "", "Good gatherings start here"), element("p", "", "Add a room to start planning your venue."));
-    const button = element("button", "primary", "Create a room");
+    empty.append(element("span", "empty-icon", "+"), element("h3", "", t("room.emptyTitle")), element("p", "", t("room.emptyText")));
+    const button = element("button", "primary", t("room.create"));
     button.addEventListener("click", () => openEditor("room"));
     empty.append(button);
     canvas.append(empty);
     return;
   }
   canvas.style.aspectRatio = `${room.width} / ${room.height}`;
-  canvas.setAttribute("aria-label", `${room.name} floor plan, ${room.width} by ${room.height} meters`);
+  canvas.setAttribute("aria-label", t("room.floorPlanNamed", { name: room.name, width: room.width, height: room.height }));
   canvas.replaceChildren();
   const tables = plan.tables.filter(table => table.roomId === room.id);
   if (!tables.length) {
     const empty = element("div", "canvas-empty");
-    empty.append(element("span", "empty-icon", "+"), element("h3", "", "Make room for your guests"), element("p", "", "Add a round or rectangular table to this room."));
+    empty.append(element("span", "empty-icon", "+"), element("h3", "", t("room.noTablesTitle")), element("p", "", t("room.noTablesText")));
     canvas.append(empty);
   }
   for (const table of tables) canvas.append(makeTable(table, room, true));
@@ -132,8 +145,8 @@ function makeTable(table, room, interactive) {
   if (!interactive) return wrap;
   node.type = "button";
   node.dataset.tableId = table.id;
-  node.setAttribute("aria-label", `${table.name}, ${count} of ${table.capacity} seats occupied. Use arrow keys to move, Enter to select.`);
-  node.title = `${table.name} · ${count}/${table.capacity} seated · Arrow keys to move (Shift for larger steps)`;
+  node.setAttribute("aria-label", t("table.aria", { name: table.name, count, capacity: table.capacity }));
+  node.title = t("table.tooltip", { name: table.name, count, capacity: table.capacity });
   node.addEventListener("click", () => selectTable(table.id));
   node.addEventListener("keydown", event => {
     const moves = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
@@ -232,7 +245,7 @@ function makeSeats(table, interactive) {
     seat.dataset.guestId = guest.id;
     seat.tabIndex = 0;
     seat.setAttribute("role", "button");
-    seat.setAttribute("aria-label", `${guest.name}, seat ${index + 1} of ${guests.length} at ${table.name}. Drag, or use arrow keys, to change the seating order.`);
+    seat.setAttribute("aria-label", t("seat.aria", { name: guest.name, index: index + 1, total: guests.length, table: table.name }));
     seat.addEventListener("click", () => {
       if (seat.dataset.justDragged) { delete seat.dataset.justDragged; return; }
       const open = !seat.classList.contains("revealed");
@@ -338,7 +351,7 @@ function changeAssignment(guestId, tableId) {
     assignGuest(next, guestId, tableId);
     commit(next);
   } catch (error) {
-    notify(error.message, true);
+    notify(errorMessage(error), true);
     renderGuests();
   }
 }
@@ -348,7 +361,7 @@ function renderGuests() {
   list.replaceChildren();
   const query = $("guest-search").value.toLocaleLowerCase();
   const guests = plan.guests.filter(guest => guest.name.toLocaleLowerCase().includes(query) && (!$("unseated-only").checked || guest.tableId === null));
-  if (!guests.length) list.append(element("p", "empty-list", plan.guests.length ? "No guests match your filters." : "Your guest list is waiting. Add a name or paste your whole list above."));
+  if (!guests.length) list.append(element("p", "empty-list", t(plan.guests.length ? "guests.noMatch" : "guests.empty")));
   const rooms = new Map(plan.rooms.map(room => [room.id, room]));
   for (const guest of guests) {
     const card = element("div", "guest-card");
@@ -360,9 +373,9 @@ function renderGuests() {
     const top = element("div", "guest-top");
     const initials = guest.name.split(/\s+/).slice(0, 2).map(part => part[0]).join("").toLocaleUpperCase();
     const remove = element("button", "icon-button", "\u00d7");
-    remove.setAttribute("aria-label", `Remove ${guest.name}`);
+    remove.setAttribute("aria-label", t("guest.remove", { name: guest.name }));
     remove.addEventListener("click", () => {
-      if (!confirm(`Remove ${guest.name} from the guest list?`)) return;
+      if (!confirm(t("guest.removeConfirm", { name: guest.name }))) return;
       const next = structuredClone(plan);
       next.guests = next.guests.filter(item => item.id !== guest.id);
       commit(next);
@@ -370,13 +383,13 @@ function renderGuests() {
     const nameLabel = element("span", "guest-name", guest.name);
     const rename = element("button", "icon-button rename-button", "\u270E");
     rename.type = "button";
-    rename.setAttribute("aria-label", `Rename ${guest.name}`);
-    rename.title = "Rename";
+    rename.setAttribute("aria-label", t("guest.rename", { name: guest.name }));
+    rename.title = t("guest.renameTitle");
     const startRename = () => {
       const input = element("input", "rename-input");
       input.value = guest.name;
       input.maxLength = 100;
-      input.setAttribute("aria-label", `New name for ${guest.name}`);
+      input.setAttribute("aria-label", t("guest.newName", { name: guest.name }));
       let done = false;
       const finish = save => {
         if (done) return;
@@ -388,7 +401,7 @@ function renderGuests() {
           next.guests.find(item => item.id === guest.id).name = name;
           commit(next);
         } catch (error) {
-          notify(error.message, true);
+          notify(errorMessage(error), true);
           renderGuests();
         }
       };
@@ -408,8 +421,8 @@ function renderGuests() {
     top.append(element("span", "avatar", initials), nameLabel, rename, remove);
     const select = element("select");
     select.dataset.guestId = guest.id;
-    select.setAttribute("aria-label", `Table for ${guest.name}`);
-    select.append(new Option("Unseated", ""));
+    select.setAttribute("aria-label", t("guest.tableFor", { name: guest.name }));
+    select.append(new Option(t("guest.unseated"), ""));
     const group = guest.linkId ? plan.guests.filter(item => item.linkId === guest.linkId) : [guest];
     for (const table of plan.tables) {
       const count = occupancy(plan, table.id);
@@ -432,35 +445,289 @@ function makeLinkRow(guest, group) {
   const row = element("div", "link-row");
   if (group.length > 1) {
     row.classList.add("linked");
-    row.append(element("span", "link-names", `\u{1F517} Seated with ${group.filter(item => item !== guest).map(item => item.name).join(", ")}`));
-    const unlink = element("button", "link-button", "Unlink");
+    row.append(element("span", "link-names", t("guest.seatedWith", { names: group.filter(item => item !== guest).map(item => item.name).join(", ") })));
+    const unlink = element("button", "link-button", t("guest.unlink"));
     unlink.type = "button";
-    unlink.setAttribute("aria-label", `Unlink ${guest.name}`);
+    unlink.setAttribute("aria-label", t("guest.unlinkLabel", { name: guest.name }));
     unlink.addEventListener("click", () => {
-      const next = structuredClone(plan);
-      unlinkGuest(next, guest.id);
-      commit(next);
+      changeLink(guest.id);
     });
     row.append(unlink);
   }
   const picker = element("select", "link-select");
-  picker.setAttribute("aria-label", `Link ${guest.name} with another guest`);
-  picker.append(new Option(group.length > 1 ? "Add another link\u2026" : "Link with\u2026", ""));
+  picker.setAttribute("aria-label", t("guest.linkLabel", { name: guest.name }));
+  picker.append(new Option(t(group.length > 1 ? "guest.addLink" : "guest.linkWith"), ""));
   for (const other of plan.guests) if (!group.includes(other)) picker.append(new Option(other.name, other.id));
   picker.addEventListener("change", () => {
     if (!picker.value) return;
-    try {
-      const next = structuredClone(plan);
-      linkGuests(next, guest.id, picker.value);
-      commit(next);
-      notify(`${guest.name} will always be seated with the linked guests.`);
-    } catch (error) {
-      notify(error.message, true);
-      renderGuests();
-    }
+    changeLink(guest.id, picker.value);
   });
   row.append(picker);
   return row;
+}
+
+function changeLink(guestId, otherId = null) {
+  $("groups-error").hidden = true;
+  try {
+    const next = structuredClone(plan);
+    if (otherId === null) unlinkGuest(next, guestId);
+    else linkGuests(next, guestId, otherId);
+    commit(next);
+    notify(t(otherId === null ? "link.unlinked" : "link.linked"));
+    return true;
+  } catch (error) {
+    reportGroupError(error);
+    renderGuests();
+    return false;
+  }
+}
+
+function reportGroupError(error) {
+  const message = errorMessage(error);
+  notify(message, true);
+  if (!$("groups-panel").hidden) {
+    $("groups-error").textContent = message;
+    $("groups-error").hidden = false;
+  }
+}
+
+function changeGroup(guestId, targetId) {
+  if (targetId === null) return changeLink(guestId);
+  $("groups-error").hidden = true;
+  try {
+    const next = structuredClone(plan);
+    moveGuestToGroup(next, guestId, targetId);
+    commit(next);
+    notify(t("link.moved"));
+    focusGroupControl(targetId);
+  } catch (error) {
+    reportGroupError(error);
+  }
+}
+
+function validGroupDrop(target) {
+  const guest = plan.guests.find(item => item.id === groupDragGuestId);
+  if (!guest) return false;
+  if (target === $("group-unlink-drop")) return Boolean(guest.linkId);
+  const other = plan.guests.find(item => item.id === target.dataset.guestId);
+  return Boolean(other && other.id !== guest.id && (!guest.linkId || guest.linkId !== other.linkId));
+}
+
+function clearGroupDropTargets() {
+  for (const node of $("groups-panel").querySelectorAll(".group-drop-target")) node.classList.remove("group-drop-target");
+}
+
+function makeGroupDropTarget(node, targetId) {
+  node.addEventListener("dragover", event => {
+    if (!event.dataTransfer.types.includes("application/x-gather-group-member") || !validGroupDrop(node)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    clearGroupDropTargets();
+    node.classList.add("group-drop-target");
+  });
+  node.addEventListener("dragleave", event => {
+    if (!node.contains(event.relatedTarget)) node.classList.remove("group-drop-target");
+  });
+  node.addEventListener("drop", event => {
+    if (!event.dataTransfer.types.includes("application/x-gather-group-member")) return;
+    event.preventDefault();
+    const guestId = event.dataTransfer.getData("application/x-gather-group-member");
+    const valid = guestId === groupDragGuestId && validGroupDrop(node);
+    clearGroupDropTargets();
+    groupDragGuestId = null;
+    if (valid) changeGroup(guestId, targetId);
+  });
+}
+
+function makeGroupDraggable(member, handle, guest) {
+  member.draggable = true;
+  member.dataset.guestId = guest.id;
+  member.addEventListener("dragstart", event => {
+    if (event.target.closest("button")) { event.preventDefault(); return; }
+    groupDragGuestId = guest.id;
+    event.dataTransfer.setData("application/x-gather-group-member", guest.id);
+    event.dataTransfer.effectAllowed = "move";
+    member.classList.add("group-dragging");
+  });
+  member.addEventListener("dragend", () => {
+    groupDragGuestId = null;
+    member.classList.remove("group-dragging");
+    clearGroupDropTargets();
+  });
+  handle.addEventListener("pointerdown", event => {
+    if (event.pointerType === "mouse" || event.button !== 0) return;
+    event.preventDefault();
+    groupDragGuestId = guest.id;
+    handle.setPointerCapture(event.pointerId);
+    const ghost = element("div", "group-drag-ghost", guest.name);
+    $("groups-panel").append(ghost);
+    member.classList.add("group-dragging");
+    let target = null;
+    const move = moveEvent => {
+      ghost.style.left = `${moveEvent.clientX + 12}px`;
+      ghost.style.top = `${moveEvent.clientY + 12}px`;
+      target = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest(".group-card, #group-unlink-drop") ?? null;
+      clearGroupDropTargets();
+      if (target && validGroupDrop(target)) target.classList.add("group-drop-target");
+    };
+    const finish = finishEvent => {
+      if (finishEvent.type === "pointerup") move(finishEvent);
+      const valid = finishEvent.type === "pointerup" && target && validGroupDrop(target);
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", finish);
+      handle.removeEventListener("pointercancel", finish);
+      handle.removeEventListener("lostpointercapture", finish);
+      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+      ghost.remove();
+      member.classList.remove("group-dragging");
+      clearGroupDropTargets();
+      groupDragGuestId = null;
+      if (valid) changeGroup(guest.id, target === $("group-unlink-drop") ? null : target.dataset.guestId);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", finish);
+    handle.addEventListener("pointercancel", finish);
+    handle.addEventListener("lostpointercapture", finish);
+    move(event);
+  });
+}
+
+function renderGroups() {
+  const groups = new Map();
+  const singles = [];
+  for (const guest of plan.guests) {
+    if (!guest.linkId) singles.push(guest);
+    else {
+      if (!groups.has(guest.linkId)) groups.set(guest.linkId, []);
+      groups.get(guest.linkId).push(guest);
+    }
+  }
+  const tables = new Map(plan.tables.map(table => [table.id, table]));
+  const rooms = new Map(plan.rooms.map(room => [room.id, room]));
+  const location = guest => {
+    const table = tables.get(guest.tableId);
+    return table ? `${rooms.get(table.roomId).name} / ${table.name}` : t("guest.unseated");
+  };
+  const query = $("group-search").value.trim().toLocaleLowerCase();
+  const matches = guest => guest.name.toLocaleLowerCase().includes(query);
+  const cards = $("group-cards");
+  cards.replaceChildren();
+  const makeCard = (members, title, linked, linkId = null, defaultGroupName = "") => {
+    const section = element("section", "group-card");
+    section.dataset.guestId = members[0].id;
+    makeGroupDropTarget(section, members[0].id);
+    section.setAttribute("aria-label", title);
+    const heading = element("div", "group-heading");
+    const titleNode = element("h3", "", title);
+    heading.append(titleNode);
+    if (linked) {
+      const rename = element("button", "icon-button group-rename-button", "\u270E");
+      rename.type = "button";
+      rename.title = t("groups.rename");
+      rename.setAttribute("aria-label", t("groups.renameLabel", { name: defaultGroupName }));
+      rename.addEventListener("click", () => {
+        const form = element("form", "group-name-editor");
+        const input = element("input", "group-name-input");
+        input.value = plan.groupNames[linkId] ?? defaultGroupName;
+        input.maxLength = 100;
+        input.required = true;
+        input.setAttribute("aria-label", t("groups.nameLabel", { name: defaultGroupName }));
+        const saveName = element("button", "primary", t("groups.save"));
+        saveName.type = "submit";
+        const cancel = element("button", "", t("groups.cancel"));
+        cancel.type = "button";
+        cancel.addEventListener("click", renderGroups);
+        form.addEventListener("submit", event => {
+          event.preventDefault();
+          if (!input.reportValidity()) return;
+          try {
+            const next = structuredClone(plan);
+            renameGroup(next, linkId, input.value);
+            commit(next);
+          } catch (error) {
+            reportGroupError(error);
+          }
+        });
+        form.append(input, saveName, cancel);
+        heading.replaceWith(form);
+        input.focus();
+        input.select();
+      });
+      heading.append(rename);
+    }
+    section.append(heading);
+    const list = element("ul", "group-members");
+    for (const guest of members) {
+      const member = element("li", "group-member");
+      const name = element("div");
+      name.append(element("strong", "", guest.name), element("small", "", location(guest)));
+      const handle = element("span", "group-drag-handle", "::");
+      handle.title = t("groups.dragTitle", { name: guest.name });
+      handle.setAttribute("aria-hidden", "true");
+      member.append(handle, element("span", "avatar", initials(guest.name)), name);
+      makeGroupDraggable(member, handle, guest);
+      if (linked) {
+        const remove = element("button", "", t("groups.remove"));
+        remove.type = "button";
+        remove.setAttribute("aria-label", t("groups.removeLabel", { name: guest.name }));
+        remove.addEventListener("click", () => {
+          if (changeLink(guest.id)) focusGroupControl(members.find(item => item.id !== guest.id).id);
+        });
+        member.append(remove);
+      }
+      list.append(member);
+    }
+    section.append(list);
+    const form = element("form", "group-add");
+    const picker = element("select");
+    picker.required = true;
+    picker.setAttribute("aria-label", linked ? t("groups.addPersonLabel", { title }) : t("groups.linkPersonLabel", { name: members[0].name }));
+    picker.append(new Option(t(linked ? "groups.chooseAdd" : "groups.chooseLink"), ""));
+    const memberIds = new Set(members.map(guest => guest.id));
+    for (const guest of plan.guests) {
+      if (memberIds.has(guest.id)) continue;
+      picker.append(new Option(`${guest.name} - ${location(guest)}${guest.linkId ? t("groups.mergesGroup") : ""}`, guest.id));
+    }
+    const add = element("button", "primary", t(linked ? "groups.addToGroup" : "groups.link"));
+    add.type = "submit";
+    add.disabled = true;
+    picker.addEventListener("change", () => { add.disabled = !picker.value; });
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      if (changeLink(members[0].id, picker.value)) focusGroupControl(members[0].id);
+    });
+    form.append(picker, add);
+    section.append(form);
+    return section;
+  };
+  let groupNumber = 0;
+  for (const [linkId, members] of groups) {
+    groupNumber++;
+    const groupName = plan.groupNames[linkId];
+    const defaultGroupName = groupName || t("groups.defaultName", { number: groupNumber });
+    const title = t("groups.cardTitle", { name: defaultGroupName, count: members.length });
+    if (!members.some(matches) && !title.toLocaleLowerCase().includes(query)) continue;
+    cards.append(makeCard(members, title, true, linkId, defaultGroupName));
+  }
+  if (!$("linked-only").checked) {
+    for (const guest of singles.filter(matches)) cards.append(makeCard([guest], t("groups.notLinked"), false));
+  }
+  if (!cards.children.length) cards.append(element("p", "empty-list", t(plan.guests.length ? "groups.noMatch" : "groups.empty")));
+}
+
+function focusGroupControl(id) {
+  const card = Array.from($("group-cards").children).find(node => node.dataset.guestId === id);
+  (card?.querySelector("select") ?? $("group-search")).focus({ preventScroll: true });
+}
+
+function selectPlanningTab(tab) {
+  for (const item of $("planning-tabs").querySelectorAll('[role="tab"]')) {
+    const selected = item === tab;
+    item.setAttribute("aria-selected", String(selected));
+    item.tabIndex = selected ? 0 : -1;
+    $(item.getAttribute("aria-controls")).hidden = !selected;
+  }
+  if (!$("groups-panel").hidden) renderGroups();
 }
 
 function renderDetails() {
@@ -472,31 +739,31 @@ function renderDetails() {
   const guests = plan.guests.filter(guest => guest.tableId === table.id);
   const heading = element("div", "details-heading");
   const title = element("div");
-  title.append(element("h3", "", table.name), element("p", "helper", `${guests.length} of ${table.capacity} seats occupied · ${table.width} x ${table.height} m`));
-  const edit = element("button", "", "Edit table");
+  title.append(element("h3", "", table.name), element("p", "helper", t("table.summary", { count: guests.length, capacity: table.capacity, width: table.width, height: table.height })));
+  const edit = element("button", "", t("table.edit"));
   edit.addEventListener("click", () => openEditor("table", table.id));
   heading.append(title, edit);
   details.append(heading);
   const chips = element("div", "assigned-guests");
-  if (!guests.length) chips.append(element("p", "muted", "No guests yet. Assign someone from the guest list."));
-  else details.append(element("p", "helper", "Seats run clockwise from the top of the table. Drag a name or use the arrows to change the order. You can also drag the initials around the table."));
+  if (!guests.length) chips.append(element("p", "muted", t("table.noGuests")));
+  else details.append(element("p", "helper", t("table.seatHelp")));
   guests.forEach((guest, index) => {
     const chip = element("span", "guest-chip");
     chip.draggable = true;
     chip.dataset.guestId = guest.id;
     chip.append(element("span", "chip-number", String(index + 1)), element("span", "", guest.name));
-    const reorder = (label, glyph, target) => {
+    const reorder = (key, glyph, target) => {
       const button = element("button", "icon-button", glyph);
       button.type = "button";
-      button.setAttribute("aria-label", `${label} ${guest.name}`);
+      button.setAttribute("aria-label", t(key, { name: guest.name }));
       button.disabled = target < 0 || target >= guests.length;
       button.addEventListener("click", () => moveSeat(guest.id, target, true));
       return button;
     };
     const remove = element("button", "icon-button", "\u00d7");
-    remove.setAttribute("aria-label", `Unseat ${guest.name}`);
+    remove.setAttribute("aria-label", t("table.unseat", { name: guest.name }));
     remove.addEventListener("click", () => changeAssignment(guest.id, null));
-    chip.append(reorder("Move earlier:", "\u25c0", index - 1), reorder("Move later:", "\u25b6", index + 1), remove);
+    chip.append(reorder("table.moveEarlier", "\u25c0", index - 1), reorder("table.moveLater", "\u25b6", index + 1), remove);
     chip.addEventListener("dragstart", event => {
       event.dataTransfer.setData("application/x-gather-seat", guest.id);
       event.dataTransfer.effectAllowed = "move";
@@ -527,7 +794,7 @@ function moveSeat(guestId, seatIndex, keepFocus) {
       const chip = Array.from($("table-details").querySelectorAll(".guest-chip")).find(node => node.dataset.guestId === guestId);
       (chip?.querySelector("button:not(:disabled)"))?.focus({ preventScroll: true });
     }
-  } catch (error) { notify(error.message, true); }
+  } catch (error) { notify(errorMessage(error), true); }
 }
 
 function field(label, name, value, options = {}) {
@@ -561,28 +828,28 @@ function openEditor(kind, id = null) {
   fields.replaceChildren();
   const room = currentRoom();
   if (kind === "venue") {
-    $("dialog-title").textContent = "Name your venue";
-    fields.append(field("Venue name", "name", plan.name));
+    $("dialog-title").textContent = t("venue.nameTitle");
+    fields.append(field(t("venue.nameLabel"), "name", plan.name));
   } else if (kind === "room") {
     const item = plan.rooms.find(value => value.id === id);
-    $("dialog-title").textContent = item ? "Edit room" : "Create a room";
-    fields.append(field("Room name", "name", item?.name ?? `Room ${plan.rooms.length + 1}`));
+    $("dialog-title").textContent = t(item ? "room.editTitle" : "room.createTitle");
+    fields.append(field(t("room.nameLabel"), "name", item?.name ?? t("room.defaultName", { number: plan.rooms.length + 1 })));
     const row = element("div", "field-row");
-    row.append(field("Width (meters)", "width", item?.width ?? 12, { type: "number", min: 2, max: 100 }),
-      field("Length (meters)", "height", item?.height ?? 8, { type: "number", min: 2, max: 100 }));
-    fields.append(row, element("p", "helper", "Rooms can be 2-100 meters in each direction. Tables are kept within the room when you resize it."));
+    row.append(field(t("room.widthLabel"), "width", item?.width ?? 12, { type: "number", min: 2, max: 100 }),
+      field(t("room.lengthLabel"), "height", item?.height ?? 8, { type: "number", min: 2, max: 100 }));
+    fields.append(row, element("p", "helper", t("room.sizeHelp")));
   } else {
     if (!room) return;
     const item = plan.tables.find(value => value.id === id);
-    $("dialog-title").textContent = item ? "Edit table" : "Add a table";
-    fields.append(field("Table name", "name", item?.name ?? `Table ${plan.tables.length + 1}`),
-      field("Shape", "shape", item?.shape ?? "round", { choices: [["round", "Round"], ["rectangle", "Rectangular"]] }),
-      field("Seats", "capacity", item?.capacity ?? 8, { type: "number", min: 1, max: 100, step: 1 }));
+    $("dialog-title").textContent = t(item ? "table.edit" : "table.addTitle");
+    fields.append(field(t("table.nameLabel"), "name", item?.name ?? t("table.defaultName", { number: plan.tables.length + 1 })),
+      field(t("table.shapeLabel"), "shape", item?.shape ?? "round", { choices: [["round", t("table.round")], ["rectangle", t("table.rectangle")]] }),
+      field(t("table.seatsLabel"), "capacity", item?.capacity ?? 8, { type: "number", min: 1, max: 100, step: 1 }));
     const row = element("div", "field-row");
-    row.append(field("Width (m)", "width", item?.width ?? 1.8, { type: "number", min: 0.5, max: 20 }),
-      field("Length (meters)", "height", item?.height ?? 1.8, { type: "number", min: 0.5, max: 20 }));
-    fields.append(row, field("Orientation", "rotation", item?.rotation ?? 0, { choices: [["0", "Horizontal (0 degrees)"], ["90", "Vertical (90 degrees)"]] }),
-      element("p", "helper", "Round tables are sized by their diameter. Tables must fit inside the room. Overlap is allowed so you can arrange tables together."));
+    row.append(field(t("table.widthLabel"), "width", item?.width ?? 1.8, { type: "number", min: 0.5, max: 20 }),
+      field(t("table.lengthLabel"), "height", item?.height ?? 1.8, { type: "number", min: 0.5, max: 20 }));
+    fields.append(row, field(t("table.orientationLabel"), "rotation", item?.rotation ?? 0, { choices: [["0", t("table.horizontal")], ["90", t("table.vertical")]] }),
+      element("p", "helper", t("table.sizeHelp")));
     const syncShape = () => {
       const round = $("field-shape").value === "round";
       for (const name of ["height", "rotation"]) {
@@ -590,7 +857,7 @@ function openEditor(kind, id = null) {
         $(`field-${name}`).closest(".field").hidden = round;
       }
       row.style.gridTemplateColumns = round ? "1fr" : "";
-      $("field-width").labels[0].textContent = round ? "Diameter (m)" : "Width (m)";
+      $("field-width").labels[0].textContent = t(round ? "table.diameterLabel" : "table.widthLabel");
     };
     $("field-shape").addEventListener("change", syncShape);
     syncShape();
@@ -612,10 +879,10 @@ $("editor-form").addEventListener("submit", event => {
       const room = { id: editor.id ?? uid(), name, width: Number(values.get("width")), height: Number(values.get("height")) };
       if (editor.id) next.rooms[next.rooms.findIndex(item => item.id === editor.id)] = room;
       else next.rooms.push(room);
-      if (next.rooms.length > LIMITS.rooms) throw new Error(`You can create up to ${LIMITS.rooms} rooms.`);
+      if (next.rooms.length > LIMITS.rooms) throw new Error(t("room.limit", { max: LIMITS.rooms }));
       for (const table of next.tables.filter(item => item.roomId === room.id)) {
         const size = tableSize(table);
-        if (size.width > room.width || size.height > room.height) throw new Error(`${table.name} is too large for this room. Resize the table first.`);
+        if (size.width > room.width || size.height > room.height) throw new Error(t("room.tableTooLarge", { table: table.name }));
         Object.assign(table, clampPosition(table, room, table.x, table.y));
       }
       newRoomId = room.id;
@@ -640,14 +907,14 @@ $("editor-form").addEventListener("submit", event => {
     commit(valid);
     $("editor-dialog").close();
   } catch (error) {
-    $("dialog-error").textContent = error.message;
+    $("dialog-error").textContent = errorMessage(error);
     $("dialog-error").hidden = false;
   }
 });
 
 $("delete-item").addEventListener("click", () => {
   const room = editor.kind === "room";
-  if (!confirm(room ? "Delete this room and all its tables? Its guests will become unseated." : "Delete this table? Its guests will become unseated.")) return;
+  if (!confirm(t(room ? "room.deleteConfirm" : "table.deleteConfirm"))) return;
   const next = structuredClone(plan);
   if (room) removeRoom(next, editor.id);
   else removeTable(next, editor.id);
@@ -657,32 +924,51 @@ $("delete-item").addEventListener("click", () => {
 for (const id of ["close-dialog", "cancel-dialog"]) $(id).addEventListener("click", () => $("editor-dialog").close());
 $("rename-venue").addEventListener("click", () => openEditor("venue"));
 $("new-plan-button").addEventListener("click", () => {
-  if (!confirm("Start a new plan? Export your current plan first if you want to keep it.")) return;
+  if (!confirm(t("plan.newConfirm"))) return;
   activeRoomId = null;
   selectedTableId = null;
   $("guest-search").value = "";
   $("unseated-only").checked = false;
   $("guest-names").value = "";
-  commit(createPlan());
-  notify("New plan created.");
+  commit(createPlan(t("plan.defaultName")));
+  notify(t("plan.created"));
 });
 $("add-room").addEventListener("click", () => openEditor("room"));
 $("add-table").addEventListener("click", () => openEditor("table"));
 $("edit-room").addEventListener("click", () => openEditor("room", activeRoomId));
 $("guest-search").addEventListener("input", renderGuests);
 $("unseated-only").addEventListener("change", renderGuests);
+const planningTabs = Array.from($("planning-tabs").querySelectorAll('[role="tab"]'));
+for (const tab of planningTabs) {
+  tab.addEventListener("click", () => selectPlanningTab(tab));
+  tab.addEventListener("keydown", event => {
+    const index = planningTabs.indexOf(tab);
+    let nextIndex;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % planningTabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + planningTabs.length) % planningTabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = planningTabs.length - 1;
+    else return;
+    event.preventDefault();
+    selectPlanningTab(planningTabs[nextIndex]);
+    planningTabs[nextIndex].focus();
+  });
+}
+$("group-search").addEventListener("input", renderGroups);
+$("linked-only").addEventListener("change", renderGroups);
+makeGroupDropTarget($("group-unlink-drop"), null);
 $("guest-form").addEventListener("submit", event => {
   event.preventDefault();
   const names = $("guest-names").value.split(/\r?\n/).map(name => name.trim()).filter(Boolean);
-  if (!names.length) { notify("Enter at least one guest name.", true); return; }
-  if (plan.guests.length + names.length > LIMITS.guests) { notify(`You can add up to ${LIMITS.guests} guests.`, true); return; }
+  if (!names.length) { notify(t("guests.enterName"), true); return; }
+  if (plan.guests.length + names.length > LIMITS.guests) { notify(t("guests.limit", { max: LIMITS.guests }), true); return; }
   try {
     const next = structuredClone(plan);
     next.guests.push(...names.map(name => ({ id: uid(), name, tableId: null })));
     commit(next);
     $("guest-names").value = "";
-    notify(`${names.length} ${names.length === 1 ? "guest" : "guests"} added.`);
-  } catch (error) { notify(error.message, true); }
+    notify(t("guests.added", { count: names.length }));
+  } catch (error) { notify(errorMessage(error), true); }
 });
 
 $("export-button").addEventListener("click", () => {
@@ -695,24 +981,24 @@ $("export-button").addEventListener("click", () => {
   anchor.click();
   anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  notify("Plan exported. Keep this file as a backup.");
+  notify(t("plan.exported"));
 });
 $("import-button").addEventListener("click", () => $("import-file").click());
 $("import-file").addEventListener("change", async event => {
   const file = event.target.files[0];
   if (!file) return;
   try {
-    if (file.size > 5 * 1024 * 1024) throw new Error("The plan file must be smaller than 5 MB.");
+    if (file.size > 5 * 1024 * 1024) throw new Error(t("plan.importTooLarge"));
     const imported = validatePlan(JSON.parse(await file.text()));
-    if (!confirm(`Replace the current plan with "${imported.name}"? Export your current plan first if you want to keep it.`)) return;
+    if (!confirm(t("plan.importConfirm", { name: imported.name }))) return;
     activeRoomId = imported.rooms[0]?.id ?? null;
     selectedTableId = null;
     $("guest-search").value = "";
     $("unseated-only").checked = false;
     commit(imported);
-    notify("Plan imported.");
+    notify(t("plan.imported"));
   } catch (error) {
-    notify(`Import failed: ${error.message} Your current plan has not been changed.`, true);
+    notify(t("plan.importFailed", { message: errorMessage(error) }), true);
   } finally { event.target.value = ""; }
 });
 
@@ -722,7 +1008,7 @@ function renderPrint() {
   for (const room of plan.rooms) {
     const section = element("section", "print-room");
     section.append(element("h1", "", plan.name), element("h2", "", room.name),
-      element("p", "", `${room.width} m wide x ${room.height} m long`));
+      element("p", "", t("room.dimensions", { width: room.width, height: room.height })));
     const canvas = element("div", "room-canvas");
     canvas.style.aspectRatio = `${room.width} / ${room.height}`;
     const tables = plan.tables.filter(table => table.roomId === room.id);
@@ -731,8 +1017,8 @@ function renderPrint() {
     for (const table of tables) {
       const guests = plan.guests.filter(guest => guest.tableId === table.id);
       const block = element("div", "print-table");
-      block.append(element("h3", "", `${table.name} (${guests.length}/${table.capacity} seats)`),
-        element("p", "", guests.length ? guests.map(guest => guest.name).join(", ") : "No guests assigned"));
+      block.append(element("h3", "", t("print.tableHeading", { name: table.name, count: guests.length, capacity: table.capacity })),
+        element("p", "", guests.length ? guests.map(guest => guest.name).join(", ") : t("print.noGuests")));
       section.append(block);
     }
     output.append(section);
@@ -740,8 +1026,8 @@ function renderPrint() {
   const unseated = plan.guests.filter(guest => guest.tableId === null);
   if (unseated.length || !plan.rooms.length) {
     const section = element("section", "print-room");
-    section.append(element("h1", "", plan.name), element("h2", "", `Unseated guests (${unseated.length})`),
-      element("p", "", unseated.map(guest => guest.name).join(", ") || "No rooms or guests yet."));
+    section.append(element("h1", "", plan.name), element("h2", "", t("print.unseated", { count: unseated.length })),
+      element("p", "", unseated.map(guest => guest.name).join(", ") || t("print.nothing")));
     output.append(section);
   }
 }
@@ -751,7 +1037,7 @@ function fullscreenActive() {
 
 function syncFullscreenButton() {
   const active = fullscreenActive();
-  $("fullscreen-button").textContent = active ? "Exit full screen" : "Full screen";
+  $("fullscreen-button").textContent = t(active ? "fullscreen.exit" : "fullscreen.enter");
   $("fullscreen-button").setAttribute("aria-pressed", String(active));
   document.body.classList.toggle("workspace-expanded", $("workspace").classList.contains("pseudo-fullscreen"));
 }
@@ -781,5 +1067,17 @@ document.addEventListener("click", event => {
   for (const seat of document.querySelectorAll(".seat.revealed")) seat.classList.remove("revealed");
 });
 $("print-button").addEventListener("click", () => { renderPrint(); window.print(); });
+
+const languageSelect = $("language-select");
+for (const { code, name } of GatherI18n.available()) languageSelect.append(new Option(name, code));
+languageSelect.value = GatherI18n.locale;
+languageSelect.addEventListener("change", () => {
+  GatherI18n.setLocale(languageSelect.value);
+  setSaveStatus(saveStatusKey);
+  syncFullscreenButton();
+  if (editor && $("editor-dialog").open) $("editor-dialog").close();
+  render();
+});
+setSaveStatus(saveStatusKey);
 render();
 })();

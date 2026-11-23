@@ -4,8 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#176858">
-  <title>Gather - Seating planner</title>
+  <title data-i18n="plan.defaultName">Your venue</title>
   <link rel="stylesheet" href="./styles.css">
+  <script src="./i18n.js"></script>
+  <script src="./locales/en.js"></script>
+  <script src="./locales/de.js"></script>
+  <script src="./locales/da.js"></script>
   <script src="./model.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
@@ -14,60 +18,79 @@
     <section class="venue-heading">
       <div>
         <div class="venue-title-row">
-          <h1 id="venue-title">Your venue</h1>
-          <button id="rename-venue" class="icon-button rename-venue-button" type="button" aria-label="Rename venue" title="Rename venue">&#9998;</button>
+          <h1 id="venue-title" data-i18n="plan.defaultName">Your venue</h1>
+          <button id="rename-venue" class="icon-button rename-venue-button" type="button" aria-label="Rename venue" title="Rename venue" data-i18n-attr="aria-label:venue.rename;title:venue.rename">&#9998;</button>
         </div>
-        <p class="muted">Arrange the room. Bring people together.</p>
       </div>
       <div class="venue-actions">
-        <button id="new-plan-button">New plan</button>
-        <span id="save-status" class="save-status">Saved in this browser</span>
+        <label class="sr-only" for="language-select" data-i18n="language.label">Language</label>
+        <select id="language-select" class="language-select"></select>
+        <button id="new-plan-button" data-i18n="plan.new">New plan</button>
+        <span id="save-status" class="save-status" data-i18n="status.saved">Saved in this browser</span>
         <div class="header-actions">
-          <button id="import-button">Import plan</button>
+          <button id="import-button" data-i18n="plan.import">Import plan</button>
           <input id="import-file" type="file" accept=".json,application/json" hidden>
-          <button id="export-button">Export plan</button>
-          <button id="print-button" class="primary">Print plan</button>
+          <button id="export-button" data-i18n="plan.export">Export plan</button>
+          <button id="print-button" class="primary" data-i18n="plan.print">Print plan</button>
         </div>
       </div>
     </section>
-    <section class="stats" aria-label="Plan overview">
-      <div><strong id="room-count">0</strong><span>Rooms</span></div>
-      <div><strong id="table-count">0</strong><span>Tables</span></div>
-      <div><strong id="guest-count">0</strong><span>Guests</span></div>
-      <div><strong id="seated-count">0</strong><span>Seated</span></div>
-      <div><strong id="available-count">0</strong><span>Open seats</span></div>
+    <section class="stats" aria-label="Plan overview" data-i18n-attr="aria-label:stats.label">
+      <div><strong id="room-count">0</strong><span data-i18n="stats.rooms">Rooms</span></div>
+      <div><strong id="table-count">0</strong><span data-i18n="stats.tables">Tables</span></div>
+      <div><strong id="guest-count">0</strong><span data-i18n="stats.guests">Guests</span></div>
+      <div><strong id="seated-count">0</strong><span data-i18n="stats.seated">Seated</span></div>
+      <div><strong id="available-count">0</strong><span data-i18n="stats.open">Open seats</span></div>
     </section>
     <div id="workspace" class="workspace">
+      <div class="workspace-toolbar">
+        <div id="planning-tabs" class="planning-tabs" role="tablist" aria-label="Planning workspace" data-i18n-attr="aria-label:tabs.label">
+          <button id="seating-tab" type="button" role="tab" aria-selected="true" aria-controls="seating-panel" data-i18n="tabs.seating">Seating planner</button>
+          <button id="groups-tab" type="button" role="tab" aria-selected="false" aria-controls="groups-panel" tabindex="-1" data-i18n="tabs.groups">Group planner</button>
+        </div>
+        <button id="fullscreen-button" type="button" aria-pressed="false" data-i18n="fullscreen.enter">Full screen</button>
+      </div>
+      <div id="seating-panel" class="seating-panel" role="tabpanel" aria-labelledby="seating-tab" tabindex="0">
       <aside class="panel guests-panel">
-        <div class="panel-heading"><div><p class="eyebrow">YOUR PEOPLE</p><h2>Guest list</h2></div><span id="guest-badge" class="badge">0</span></div>
+        <div class="panel-heading"><div><p class="eyebrow" data-i18n="guests.eyebrow">YOUR PEOPLE</p><h2 data-i18n="guests.title">Guest list</h2></div><span id="guest-badge" class="badge">0</span></div>
         <form id="guest-form">
-          <label for="guest-names">Add names, one per line</label>
-          <textarea id="guest-names" rows="3" placeholder="Alex Morgan&#10;Sam Taylor" maxlength="50000" required></textarea>
-          <button class="primary full" type="submit">+ Add guests</button>
+          <label for="guest-names" data-i18n="guests.addLabel">Add names, one per line</label>
+          <textarea id="guest-names" rows="3" placeholder="Alex Morgan&#10;Sam Taylor" data-i18n-attr="placeholder:guests.addPlaceholder" maxlength="50000" required></textarea>
+          <button class="primary full" type="submit" data-i18n="guests.add">+ Add guests</button>
         </form>
-        <div class="guest-filters"><label class="sr-only" for="guest-search">Search guests</label><input id="guest-search" type="search" placeholder="Search guests..."><label class="check-label"><input id="unseated-only" type="checkbox"> Unseated only</label></div>
-        <p class="helper">Choose a table below each name, or drag a guest onto a table.</p>
+        <div class="guest-filters"><label class="sr-only" for="guest-search" data-i18n="guests.searchLabel">Search guests</label><input id="guest-search" type="search" placeholder="Search guests..." data-i18n-attr="placeholder:guests.searchPlaceholder"><label class="check-label"><input id="unseated-only" type="checkbox"> <span data-i18n="guests.unseatedOnly">Unseated only</span></label></div>
+        <p class="helper" data-i18n="guests.helper">Choose a table below each name, or drag a guest onto a table.</p>
         <div id="guest-list" class="guest-list"></div>
       </aside>
-      <section class="panel layout-panel" aria-label="Room layout">
-        <div class="room-toolbar"><div id="room-tabs" class="room-tabs" role="tablist" aria-label="Rooms"></div><button id="add-room">+ Add room</button></div>
-        <div class="layout-toolbar"><div><h2 id="room-title">Create your first room</h2><p id="room-dimensions" class="muted">Start with the space, then add your tables.</p></div><div class="toolbar-actions"><button id="fullscreen-button" aria-pressed="false">Full screen</button><button id="edit-room" disabled>Edit room</button><button id="add-table" class="primary" disabled>+ Add table</button></div></div>
-        <div class="canvas-scroll"><div id="room-canvas" class="room-canvas" role="region" aria-label="Room floor plan"><div class="canvas-empty"><span class="empty-icon">+</span><h3>Good gatherings start here</h3><p>Add a room to start planning your venue.</p><button id="empty-add-room" class="primary">Create a room</button></div></div></div>
-        <div class="canvas-footer"><span>Drag tables to move them. Select a table to edit it.</span><span>Dimensions in meters</span></div>
+      <section class="panel layout-panel" aria-label="Room layout" data-i18n-attr="aria-label:room.layout">
+        <div class="room-toolbar"><div id="room-tabs" class="room-tabs" role="tablist" aria-label="Rooms" data-i18n-attr="aria-label:stats.rooms"></div><button id="add-room" data-i18n="room.add">+ Add room</button></div>
+        <div class="layout-toolbar"><div><h2 id="room-title" data-i18n="room.createFirst">Create your first room</h2><p id="room-dimensions" class="muted" data-i18n="room.startHint">Start with the space, then add your tables.</p></div><div class="toolbar-actions"><button id="edit-room" disabled data-i18n="room.edit">Edit room</button><button id="add-table" class="primary" disabled data-i18n="table.add">+ Add table</button></div></div>
+        <div class="canvas-scroll"><div id="room-canvas" class="room-canvas" role="region" aria-label="Room floor plan" data-i18n-attr="aria-label:room.floorPlan"></div></div>
+        <div class="canvas-footer"><span data-i18n="room.footerDrag">Drag tables to move them. Select a table to edit it.</span><span data-i18n="room.footerUnits">Dimensions in meters</span></div>
         <section id="table-details" class="table-details" hidden></section>
+      </section>
+      </div>
+      <section id="groups-panel" class="panel groups-panel" role="tabpanel" aria-labelledby="groups-tab" tabindex="0" hidden>
+        <div class="details-heading"><div><p class="eyebrow" data-i18n="groups.eyebrow">WHO SITS TOGETHER</p><h2 id="groups-title" data-i18n="groups.title">Linked groups</h2></div></div>
+        <p class="helper" data-i18n="groups.help1">Everyone in a group must sit together. Use the pencil on a group card to give it a name. Add a person to a group, or link two unlinked people to start one. Adding someone already linked merges their whole group. The group's table is used when seated; otherwise a seated member's table is used. Removing a member leaves their seat unchanged.</p>
+        <p class="helper" data-i18n="groups.help2">Drag a person onto another card to move just that person into it. Dropping onto an unlinked person's card creates a group. They take the destination person's seating location, including Unseated. On touch screens, drag using the :: handle. The dropdown controls still merge whole groups.</p>
+        <div class="group-filters"><label class="sr-only" for="group-search" data-i18n="groups.searchLabel">Search linked groups</label><input id="group-search" type="search" placeholder="Find a person or group..." data-i18n-attr="placeholder:groups.searchPlaceholder"><label class="check-label"><input id="linked-only" type="checkbox"> <span data-i18n="groups.linkedOnly">Linked groups only</span></label></div>
+        <p id="groups-error" class="form-error" role="alert" hidden></p>
+        <div id="group-unlink-drop" class="group-unlink-drop" data-i18n="groups.unlinkDrop">Drop a person here to unlink them without changing their seat. Or use their Remove button.</div>
+        <div id="group-cards" class="group-cards"></div>
       </section>
       <div id="notification" class="notification" role="status" aria-live="polite" hidden></div>
     </div>
   </main>
-  <footer class="app-footer">Your plan stays on this device. Export a copy to back it up or share it.</footer>
+  <footer class="app-footer" data-i18n="footer.text">Your plan stays on this device. Export a copy to back it up or share it.</footer>
   <dialog id="editor-dialog">
     <form id="editor-form">
-      <div class="dialog-heading"><h2 id="dialog-title"></h2><button type="button" id="close-dialog" class="icon-button" aria-label="Close dialog">&times;</button></div>
+      <div class="dialog-heading"><h2 id="dialog-title"></h2><button type="button" id="close-dialog" class="icon-button" aria-label="Close dialog" data-i18n-attr="aria-label:dialog.close">&times;</button></div>
       <div id="dialog-fields"></div>
       <p id="dialog-error" class="form-error" role="alert" hidden></p>
-      <div class="dialog-actions"><button type="button" id="delete-item" class="danger" hidden>Delete</button><span class="spacer"></span><button type="button" id="cancel-dialog">Cancel</button><button class="primary" type="submit">Save</button></div>
+      <div class="dialog-actions"><button type="button" id="delete-item" class="danger" hidden data-i18n="dialog.delete">Delete</button><span class="spacer"></span><button type="button" id="cancel-dialog" data-i18n="dialog.cancel">Cancel</button><button class="primary" type="submit" data-i18n="dialog.save">Save</button></div>
     </form>
   </dialog>
-  <section id="print-plan" class="print-plan" aria-label="Printable seating plan"></section>
+  <section id="print-plan" class="print-plan" aria-label="Printable seating plan" data-i18n-attr="aria-label:print.label"></section>
 </body>
 </html>

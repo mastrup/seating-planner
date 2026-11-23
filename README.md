@@ -32,7 +32,15 @@ There is no build step. Relative asset paths support hosting in a subdirectory. 
 5. Each seated guest's initials appear around their table, running clockwise from the top. Hover, focus or click the initials to see the full name. Drag the initials to another seat around the table to change the order, or onto a different table to move the guest there (full tables are refused) (touch works too; with the keyboard, focus a seat and use the arrow keys). Select a table to also reorder its guests by dragging names or with the arrow buttons.
 6. **Print plan** prints all rooms, table guest lists, and unseated guests. The browser print dialog can also save a PDF.
 
+Use the **Seating planner** and **Group planner** tabs to switch workspaces. Seating planning shows the guest list beside the room layout; group planning uses the full workspace width without the room layout or guest sidebar. Switching tabs preserves your plan and search filters. Keyboard users can switch tabs with Left/Right arrow keys or Home/End.
+
+Choose **Group planner** to see group cards across the whole venue. Each card lists its members and their seating locations. Use the pencil on a linked group card to name or rename it; names are saved with the plan and included in JSON exports. Choose a person and click **Add to group** to add them; choosing an already linked person merges their entire group. On an unlinked person's card, choose another person and click **Link** to start a group. Linking uses the card's first person's table if seated, otherwise a seated member's table, and refuses changes if that table cannot fit everyone. **Remove** unlinks a member without deleting the person or changing their seat. Groups with only one remaining member dissolve automatically. Search keeps the entire group visible when any member matches; **Linked groups only** hides unlinked people. Changes save automatically and remain compatible with the guest-list controls and JSON exports.
+
+Drag a person from a card onto another card to move **only that person**, not their whole group. Dropping onto an unlinked person's card creates a group. The moved person takes the destination person's seating location, including becoming unseated when the destination is unseated; everyone else keeps their seat. Full destination tables refuse the move without changing either group. Drop onto the unlink area to remove a person from their group without changing their seat. On touch screens, drag from the **::** handle. Same-group drops and cancelled drags make no changes. For keyboard use, **Remove** the person first, then use the destination card's dropdown to add them; existing dropdown linking still merges entire groups.
+
 Tables stay within room boundaries. Table overlap is intentionally allowed; this is a layout tool, not an accessibility, clearance, or fire-safety validator. Room resizing moves tables inward if necessary and rejects rooms too small for existing tables.
+
+**Full screen** expands the active planning workspace. Both tabs and **Exit full screen** remain available, so you can switch between group and seating planning without leaving full screen.
 
 ## Saving and sharing
 
@@ -41,6 +49,12 @@ Changes automatically save to this browser's local storage. Storage is specific 
 **Export plan** downloads a versioned JSON file, including guest names. Keep regular backups and only share with appropriate recipients. **Import plan** validates an exported file and asks before replacing the current plan. Invalid imports leave the existing plan unchanged. There are limits of 50 rooms, 500 tables, 5,000 guests, 100 seats per table, and 5 MB per imported file.
 
 Changing the hosting domain or local port creates a different browser storage origin. Export before moving the app, then import at the new location. The app makes no network requests after its own files load.
+
+## Translations
+
+All UI text lives in `public/locales/<code>.js` (English, German and Danish are included). The language is picked from the saved choice, then the browser language, and can be changed with the selector in the header.
+
+To add a language, copy `public/locales/en.js` to `<code>.js`, change the `register("<code>", "<Name>", ...)` call, translate the values (keep the keys and `{placeholders}`), and add a `<script>` tag for it in `public/index.html`. Missing keys fall back to English. Plural forms use `key_one` / `key_other` (plus `_few`, `_many`, etc. where the language needs them).
 
 ## Validate
 
